@@ -10,6 +10,7 @@
 #include "sz_compress_3d.hpp"
 #include "SZ3/quantizer/IntegerQuantizer.hpp"
 #include "SZ3/encoder/HuffmanEncoder.hpp"
+#include "reorder.hpp"
 
 namespace SZ=SZ3;
 
@@ -83,10 +84,10 @@ public:
 			for(int i=0; i<target_level; i++){
                 double cc = (1 - c) / (1 - pow(c, i + 1));
                 double level_eb = cc * error_bound / C2 ;
-                if(switch_to_lorenzo(data, n1, n2, n3, dims[1] * dims[2], dims[2], level_eb)){
-                    cout << "switch to SZ (lorenzo) at level " << i << endl;
-                    return i;
-                }
+                // if(switch_to_lorenzo(data, n1, n2, n3, dims[1] * dims[2], dims[2], level_eb)){
+                //     cout << "switch to SZ (lorenzo) at level " << i << endl;
+                //     return i;
+                // }
 				decompose_level_3D(data, n1, n2, n3, (T)h, dims[1] * dims[2], dims[2]);
                 // decompose_level_3D_hierarchical_basis(data, n1, n2, n3, (T)h, dims[1] * dims[2], dims[2]);
 				n1 = (n1 >> 1) + 1;
@@ -123,7 +124,8 @@ private:
                         continue;
                     }
                     auto tmp = data[i * dims[1] * dims[2] + j * dims[2] + k];
-                    quant_inds[offset ++] = quantizer.quantize_and_overwrite(tmp, 0);
+                    // quant_inds[offset ++] = quantizer.quantize_and_overwrite(tmp, 0);
+					quant_inds[i * dims[1] * dims[2] + j * dims[2] + k]= quantizer.quantize_and_overwrite(tmp, 0);
                 }
             }
         }
@@ -185,6 +187,7 @@ private:
             vector<int> quant_inds(num_elements - num_nodal_elements);
             int quant_count = 0;
             if(use_sz){
+				std::cout << "use SZ" << std::endl; 
                 T * data_buffer_pos = data_buffer;
                 const T * data_pos = data;
                 for(int i=0; i<current_dims[0]; i++){
@@ -221,6 +224,24 @@ private:
                 // level_eb += difference;
                 quant_count += quantize_level(data, dims, level_dims[l-1], level_dims[l], level_eb, quant_radius, quant_inds, quant_count, compressed_data_pos);
             }
+			// reorder the quantization indices
+			{
+				auto level_dims = init_levels(dims, target_level);
+				std::vector<int> data_buffer(quant_inds.size());
+				size_t h = 1 << (target_level - 1);
+				for(int i=0; i<target_level; i++){
+						size_t n1 = level_dims[i+1][0];
+						size_t n2 = level_dims[i+1][1];
+						size_t n3 = level_dims[i+1][2];
+						MGARD_1::data_reverse_reorder_3D(quant_inds.data(), data_buffer.data(), n1, n2, n3, dims[1]*dims[2], dims[2]);
+						h >>= 1;
+        			}
+				writefile("quant_inds_reordered.dat", quant_inds.data(), quant_inds.size());
+			}
+
+
+
+
             // record length for all quantizers
             *reinterpret_cast<size_t*>(quantizer_length) = compressed_data_pos - quantizer_length - sizeof(size_t);
             // encode

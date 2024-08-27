@@ -22,6 +22,7 @@ unsigned char * test_compress(vector<T>& data, const vector<size_t>& dims, int t
 }
 
 int main(int argc, char ** argv){
+    
     string filename = string(argv[1]);
     int type = atoi(argv[2]); // 0 for float, 1 for double
     double tolerance = atof(argv[3]);
@@ -40,23 +41,28 @@ int main(int argc, char ** argv){
     size_t num_elements = 0;
     size_t compressed_size = 0;
     unsigned char * compressed = NULL;
+    int data_size = 0;
     switch(type){
         case 0:
             {
                 auto data = MGARD::readfile<float>(filename.c_str(), num_elements);
                 compressed = test_compress(data, dims, target_level, eb, compressed_size, use_sz);
+                data_size = sizeof(float);  
                 break;
             }
         case 1:
             {
                 auto data = MGARD::readfile<double>(filename.c_str(), num_elements);
                 compressed = test_compress(data, dims, target_level, eb, compressed_size, use_sz);
+                data_size = sizeof(double); 
                 break;
             }
         default:
             cerr << "Only 0 (float) and 1 (double) are implemented in this test\n";
             exit(0);
     }
+    std::cout<<"Compressed size = "<<compressed_size<<std::endl;
+    std::cout<<"Compression ratio = "<<(double)num_elements*data_size/compressed_size<<std::endl;
     MGARD::writefile((filename + ".mgard").c_str(), compressed, compressed_size);
     free(compressed);
     return 0;
