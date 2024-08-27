@@ -8,10 +8,15 @@
 #include "adaptive.hpp"
 #include "utils.hpp"
 #include "sz_compress_3d.hpp"
+#include "SZ3/quantizer/IntegerQuantizer.hpp"
+#include "SZ3/encoder/HuffmanEncoder.hpp"
+
+namespace SZ=SZ3;
 
 namespace MGARD{
 
 using namespace std;
+
 
 template <class T>
 class Decomposer{

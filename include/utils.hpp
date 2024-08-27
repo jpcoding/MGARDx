@@ -5,11 +5,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <quantizer/IntegerQuantizer.hpp>
-#include <encoder/HuffmanEncoder.hpp>
+#include "SZ3/quantizer/IntegerQuantizer.hpp"
+#include "SZ3/encoder/HuffmanEncoder.hpp"
 #include "zstd.h"
+namespace SZ=SZ3;
 
 namespace MGARD{
+
 
 using namespace std;
 
