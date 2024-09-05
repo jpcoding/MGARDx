@@ -10,7 +10,8 @@
 #include "sz_compress_3d.hpp"
 #include "SZ3/quantizer/IntegerQuantizer.hpp"
 #include "SZ3/encoder/HuffmanEncoder.hpp"
-#include "reorder.hpp"
+#include "quant_pred.hpp"
+#include "reorder_int.hpp"
 
 namespace SZ=SZ3;
 
@@ -84,10 +85,10 @@ public:
 			for(int i=0; i<target_level; i++){
                 double cc = (1 - c) / (1 - pow(c, i + 1));
                 double level_eb = cc * error_bound / C2 ;
-                // if(switch_to_lorenzo(data, n1, n2, n3, dims[1] * dims[2], dims[2], level_eb)){
-                //     cout << "switch to SZ (lorenzo) at level " << i << endl;
-                //     return i;
-                // }
+                if(switch_to_lorenzo(data, n1, n2, n3, dims[1] * dims[2], dims[2], level_eb)){
+                    cout << "switch to SZ (lorenzo) at level " << i << endl;
+                    return i;
+                }
 				decompose_level_3D(data, n1, n2, n3, (T)h, dims[1] * dims[2], dims[2]);
                 // decompose_level_3D_hierarchical_basis(data, n1, n2, n3, (T)h, dims[1] * dims[2], dims[2]);
 				n1 = (n1 >> 1) + 1;
@@ -117,18 +118,36 @@ private:
     int quantize_level(T * data, const vector<size_t>& dims, const vector<size_t>& coarse_dims, const vector<size_t>& fine_dims, double level_eb, int quant_radius, vector<int>& quant_inds, int offset, unsigned char *& compressed_data_pos){
         auto quantizer = SZ::LinearQuantizer<T>(level_eb, quant_radius);
         int start_offset = offset;
-        for(int i=0; i<fine_dims[0]; i++){
-            for(int j=0; j<fine_dims[1]; j++){
-                for(int k=0; k<fine_dims[2]; k++){
-                    if((i < coarse_dims[0]) && (j < coarse_dims[1]) && (k < coarse_dims[2])){
-                        continue;
-                    }
-                    auto tmp = data[i * dims[1] * dims[2] + j * dims[2] + k];
-                    // quant_inds[offset ++] = quantizer.quantize_and_overwrite(tmp, 0);
-					quant_inds[i * dims[1] * dims[2] + j * dims[2] + k]= quantizer.quantize_and_overwrite(tmp, 0);
-                }
-            }
-        }
+		if(use_sz){
+			for(int i=0; i<fine_dims[0]; i++){
+				for(int j=0; j<fine_dims[1]; j++){
+					for(int k=0; k<fine_dims[2]; k++){
+						if((i < coarse_dims[0]) && (j < coarse_dims[1]) && (k < coarse_dims[2])){
+							continue;
+						}
+						auto tmp = data[i * dims[1] * dims[2] + j * dims[2] + k];
+						quant_inds[offset ++] = quantizer.quantize_and_overwrite(tmp, 0);
+						// quant_inds[i * dims[1] * dims[2] + j * dims[2] + k]= quantizer.quantize_and_overwrite(tmp, 0);
+					}
+				}
+			}
+		}
+		else{
+			for(int i=0; i<fine_dims[0]; i++){
+				for(int j=0; j<fine_dims[1]; j++){
+					for(int k=0; k<fine_dims[2]; k++){
+						if((i < coarse_dims[0]) && (j < coarse_dims[1]) && (k < coarse_dims[2])){
+							continue;
+						}
+						auto tmp = data[i * dims[1] * dims[2] + j * dims[2] + k];
+						// quant_inds[offset ++] = quantizer.quantize_and_overwrite(tmp, 0);
+						quant_inds[i * dims[1] * dims[2] + j * dims[2] + k]= quantizer.quantize_and_overwrite(tmp, 0);
+					}
+				}
+			}
+
+		}
+
         // record quantizer
         quantizer.save(compressed_data_pos);
         return offset - start_offset;
@@ -212,7 +231,6 @@ private:
                 free(sz_compressed);
             }
             else{
-                // resize quantization number
                 quant_inds.resize(num_elements);
                 vector<size_t> dummy_dims(dims.size(), 0);
                 quant_count += quantize_level(data, dims, dummy_dims, level_dims[0], level_eb, quant_radius, quant_inds, quant_count, compressed_data_pos);
@@ -224,23 +242,44 @@ private:
                 // level_eb += difference;
                 quant_count += quantize_level(data, dims, level_dims[l-1], level_dims[l], level_eb, quant_radius, quant_inds, quant_count, compressed_data_pos);
             }
-			// reorder the quantization indices
+
+
+			if(use_sz == false)
 			{
+				// writefile("quant_inds_reordered.dat", quant_inds.data(), quant_inds.size());
 				auto level_dims = init_levels(dims, target_level);
+				for(int i = 0; i< level_dims.size(); i++){
+						cout << "level " << i << " : " << level_dims[i][0] << " " << level_dims[i][1] << " " << level_dims[i][2] << endl;
+				}
+				std::cout << "target_level = " << target_level << std::endl;    
+
 				std::vector<int> data_buffer(quant_inds.size());
-				size_t h = 1 << (target_level - 1);
 				for(int i=0; i<target_level; i++){
 						size_t n1 = level_dims[i+1][0];
 						size_t n2 = level_dims[i+1][1];
 						size_t n3 = level_dims[i+1][2];
-						MGARD_1::data_reverse_reorder_3D(quant_inds.data(), data_buffer.data(), n1, n2, n3, dims[1]*dims[2], dims[2]);
-						h >>= 1;
-        			}
-				writefile("quant_inds_reordered.dat", quant_inds.data(), quant_inds.size());
+						printf("level = %d, n1 = %ld , n2 = %ld, n3 = %ld\n", i,n1, n2, n3);
+						MGARD_INT::data_reverse_reorder_3D(quant_inds.data(), 
+												data_buffer.data(), n1, n2, n3, 
+												dims[1]*dims[2], dims[2]);
+				}
+				// writefile("quant_inds_reverse_reorder.dat", quant_inds.data(), quant_inds.size());
 			}
-
-
-
+			// quantization prediction
+			if(use_sz == false){
+				auto quantization_predicter = MGARD::QuantPred<T>(quant_inds.data(), 3, dims.data(), 3, 0, 32768);
+				quantization_predicter.quant_pred_level_3D(1);
+				quantization_predicter.quant_pred_level_3D(2);
+				// writefile("quant_inds_post_pred.dat", quant_inds.data(), quant_inds.size());
+			}
+			// in-place check for the recover functions
+			if(0){
+				auto quant_inds_copy = std::vector<int>(quant_inds);
+				auto quantization_predicter = MGARD::QuantPred<T>(quant_inds_copy.data(), 3, dims.data(), 3, 0, 32768, 0);
+				quantization_predicter.quant_pred_level_3D_recover(1);
+				quantization_predicter.quant_pred_level_3D_recover(2);
+				writefile("quant_inds_pred_recoverd.dat", quant_inds_copy.data(), quant_inds.size());
+			}
 
             // record length for all quantizers
             *reinterpret_cast<size_t*>(quantizer_length) = compressed_data_pos - quantizer_length - sizeof(size_t);

@@ -8,6 +8,9 @@
 #include <climits>
 #include "utils.hpp"
 #include "sz_decompress_3d.hpp"
+#include "reorder_int.hpp"
+#include "quant_pred.hpp"
+
 
 namespace MGARD{
 
@@ -115,6 +118,7 @@ private:
 	T * data_buffer = NULL;		// buffer for reordered data
 	T * load_v_buffer = NULL;
 	T * correction_buffer = NULL;
+    bool global_use_sz = true; 
     vector<vector<size_t>> level_dims;
 
     int recover_level(const unsigned char *& compressed_data_pos, const vector<size_t>& dims, const vector<size_t>& coarse_dims, const vector<size_t>& fine_dims, vector<int>& quant_inds, int offset, T * data){
@@ -122,13 +126,33 @@ private:
         size_t remaining_length = INT_MAX;
         quantizer.load(compressed_data_pos, remaining_length);
         int start_offset = offset;
-        for(int i=0; i<fine_dims[0]; i++){
-            for(int j=0; j<fine_dims[1]; j++){
-                for(int k=0; k<fine_dims[2]; k++){
-                    if((i < coarse_dims[0]) && (j < coarse_dims[1]) && (k < coarse_dims[2])){
-                        continue;
+        if(global_use_sz){
+            for(int i=0; i<fine_dims[0]; i++){
+                for(int j=0; j<fine_dims[1]; j++){
+                    for(int k=0; k<fine_dims[2]; k++){
+                        if((i < coarse_dims[0]) && (j < coarse_dims[1]) && (k < coarse_dims[2])){
+                            continue;
+                        }
+                        data[i * dims[1] * dims[2] + j * dims[2] + k] = quantizer.recover(0, quant_inds[offset ++]);
+                        // data[i * dims[1] * dims[2] + j * dims[2] + k] = quantizer.recover(0, 
+                        //                                                     quant_inds[i * dims[1] * dims[2] + j * dims[2] + k]);
+
                     }
-                    data[i * dims[1] * dims[2] + j * dims[2] + k] = quantizer.recover(0, quant_inds[offset ++]);
+                }
+            }
+        }
+        else {
+            for(int i=0; i<fine_dims[0]; i++){
+                for(int j=0; j<fine_dims[1]; j++){
+                    for(int k=0; k<fine_dims[2]; k++){
+                        if((i < coarse_dims[0]) && (j < coarse_dims[1]) && (k < coarse_dims[2])){
+                            continue;
+                        }
+                        // data[i * dims[1] * dims[2] + j * dims[2] + k] = quantizer.recover(0, quant_inds[offset ++]);
+                        data[i * dims[1] * dims[2] + j * dims[2] + k] = quantizer.recover(0, 
+                                                                            quant_inds[i * dims[1] * dims[2] + j * dims[2] + k]);
+
+                    }
                 }
             }
         }
@@ -157,6 +181,7 @@ private:
         }
         else{
             bool use_sz = *reinterpret_cast<const unsigned char*>(compressed_data_pos);
+            global_use_sz = use_sz;
             compressed_data_pos += sizeof(unsigned char);
             size_t quantizer_length = *reinterpret_cast<const size_t*>(compressed_data_pos);
             compressed_data_pos += sizeof(size_t);
@@ -179,7 +204,36 @@ private:
             size_t remaining_length = compressed_length;
             encoder.load(compressed_data_pos, remaining_length);
             auto quant_inds = encoder.decode(compressed_data_pos, quant_elements);
+            // writefile("quant_inds_de.dat", quant_inds.data(), quant_inds.size());
             encoder.postprocess_decode();
+
+            if(use_sz == false){
+				auto quantization_predicter = MGARD::QuantPred<T>(quant_inds.data(), 3, dims.data(), 3, 0, 32768, 0);
+				quantization_predicter.quant_pred_level_3D_recover(1);
+				quantization_predicter.quant_pred_level_3D_recover(2);
+                // writefile("quant_inds_reordered_recomposed1.dat", quant_inds.data(), quant_inds.size());
+                // writefile("quant_inds_pred_recoverd.dat", quant_inds.data(), quant_inds.size());
+
+		    }
+
+            if(use_sz == false){
+			    
+                size_t n1 = dims[0];
+                size_t n2 = dims[1];
+                size_t n3 = dims[2];
+                std::vector<int> data_buffer(quant_inds.size());
+                std::cout << "target_level = " << target_level << std::endl;    
+                for(int i=0; i<target_level; i++){
+                    printf("level = %d, n1 = %ld , n2 = %ld, n3 = %ld\n", i, n1, n2, n3);
+                    MGARD_INT::data_reorder_3D(quant_inds.data(), 
+                    data_buffer.data(), n1, n2, n3, dims[1]*dims[2], dims[2]);
+                    n1 = (n1 >> 1) + 1;
+                    n2 = (n2 >> 1) + 1;
+                    n3 = (n3 >> 1) + 1;
+                }
+                // writefile("quant_inds_reordered_recomposed2.dat", quant_inds.data(), quant_inds.size());
+		    }
+
             int offset = 0;
             if(use_sz){
                 for(int i=0; i<n1_nodal; i++){

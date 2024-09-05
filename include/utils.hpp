@@ -135,6 +135,7 @@ void print_statistics(const T * data_ori, const T * data_dec, size_t data_size){
     double psnr = 20 * log10((max_val - min_val) / sqrt(mse));
     cout << "Max value = " << max_val << ", min value = " << min_val << endl;
     cout << "Max error = " << max_err << ", pos = " << pos << endl;
+    cout << "Max rel error = " << max_err / (max_val - min_val) << endl;
     cout << "MSE = " << mse << ", PSNR = " << psnr << endl;
 }
 template <class T>
@@ -630,6 +631,39 @@ void compute_correction_3D(T * data_pos, T * correction_buffer, T * load_v_buffe
         correction_pos += n3_nodal;
     }
 }
+
+    class Timer {
+    public:
+        Timer() = default;
+
+        Timer(bool initstart) {
+            if (initstart) {
+                start();
+            }
+        }
+
+        void start() {
+            begin = std::chrono::steady_clock::now();
+        }
+
+        double stop() {
+            end = std::chrono::steady_clock::now();
+            return std::chrono::duration<double>(end - begin).count();
+        }
+
+        double stop(const std::string &msg) {
+            double seconds = stop();
+            std::cout << msg << " time = " << seconds << "s" << std::endl;
+            return seconds;
+        }
+
+    private:
+        std::chrono::time_point<std::chrono::steady_clock> begin, end;
+    };
+
+
+
+
 
 }
 #endif

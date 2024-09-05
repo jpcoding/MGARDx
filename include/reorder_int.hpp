@@ -1,5 +1,5 @@
-#ifndef _MGARD_REORDER_HPP
-#define _MGARD_REORDER_HPP
+#ifndef _MGARD_REORDER_HPP_INT
+#define _MGARD_REORDER_HPP_INT
 
 #include <vector>
 #include <cstdlib>
@@ -8,7 +8,7 @@
 #include <cmath>
 #include <stdio.h>
 
-namespace MGARD_1{
+namespace MGARD_INT{
 
 using namespace std;
 
@@ -108,7 +108,8 @@ void data_reorder_1D(const T * data_pos, size_t n_nodal, size_t n_coeff, T * nod
     if(n_nodal == n_coeff + 2){
         // if even, add a nodal value such that the interpolant
         // of the last two nodal values equal to the last coefficient
-        *nodal_pos = 2*cur_data_pos[0] - nodal_pos[-1];
+        // *nodal_pos = 2*cur_data_pos[0] - nodal_pos[-1];
+        *nodal_pos = cur_data_pos[0];
     }
 }
 
@@ -135,13 +136,15 @@ void data_reorder_2D(T * data_pos, T * data_buffer, size_t n1, size_t n2, size_t
         memcpy(cur_data_pos, data_buffer, n2 * sizeof(T));
         cur_data_pos += stride;
     }
-    if(!(n1 & 1)){
-        // n1 is even, change the last coeff row into nodal row
-        cur_data_pos -= stride;
-        for(int j=0; j<n2; j++){
-            cur_data_pos[j] = 2 * cur_data_pos[j] - cur_data_pos[-stride + j];
-        }
-    }
+    // if(!(n1 & 1)){
+    //     // n1 is even, change the last coeff row into nodal row
+    //     cur_data_pos -= stride;
+    //     for(int j=0; j<n2; j++){
+    //         // cur_data_pos[j] = 2 * cur_data_pos[j] - cur_data_pos[-stride + j];
+    //         cur_data_pos[j] = cur_data_pos[j];
+
+    //     }
+    // }
     // do reorder (2)
     // TODO: change to online processing for memory saving
     switch_rows_2D_by_buffer(data_pos, data_buffer, n1, n2, stride);
@@ -164,16 +167,17 @@ void data_reorder_3D(T * data_pos, T * data_buffer, size_t n1, size_t n2, size_t
         data_reorder_2D(cur_data_pos, data_buffer, n2, n3, dim1_stride);
         cur_data_pos += dim0_stride;
     }
-    if(!(n1 & 1)){
-        // n1 is even, change the last coeff plane into nodal plane
-        cur_data_pos -= dim0_stride;
-        for(int j=0; j<n2; j++){
-            for(int k=0; k<n3; k++){
-                cur_data_pos[k] = 2 * cur_data_pos[k] - cur_data_pos[- dim0_stride + k];
-            }
-            cur_data_pos += dim1_stride;
-        }
-    }
+    // if(!(n1 & 1)){
+    //     // n1 is even, change the last coeff plane into nodal plane
+    //     cur_data_pos -= dim0_stride;
+    //     for(int j=0; j<n2; j++){
+    //         for(int k=0; k<n3; k++){
+    //             // cur_data_pos[k] = 2 * cur_data_pos[k] - cur_data_pos[- dim0_stride + k];
+    //             cur_data_pos[k] = cur_data_pos[k];
+    //         }
+    //         cur_data_pos += dim1_stride;
+    //     }
+    // }
     cur_data_pos = data_pos;
     // reorder vertically
     for(int j=0; j<n2; j++){
@@ -196,7 +200,8 @@ void data_reverse_reorder_1D(T * data_pos, int n_nodal, int n_coeff, const T * n
     if(n_nodal == n_coeff + 2){
         // if even, the last coefficient equals to the interpolant
         // of the last two nodal values
-        *cur_data_pos = (nodal_pos[-1] + nodal_pos[0]) / 2;
+        // *cur_data_pos = (nodal_pos[-1] + nodal_pos[0]) / 2;
+        *cur_data_pos = nodal_pos[0];
     }
 }
 
@@ -225,13 +230,15 @@ void data_reverse_reorder_2D(T * data_pos, T * data_buffer, size_t n1, size_t n2
         data_reverse_reorder_1D(cur_data_pos, n2_nodal, n2_coeff, nodal_pos, coeff_pos);
         cur_data_pos += stride;
     }
-    if(!(n1 & 1)){
-        // n1 is even, recover the coefficients
-        cur_data_pos -= stride;
-        for(int j=0; j<n2; j++){
-            cur_data_pos[j] = (cur_data_pos[j] + cur_data_pos[-stride + j]) / 2;
-        }
-    }
+    // if(!(n1 & 1)){
+    //     // n1 is even, recover the coefficients
+    //     cur_data_pos -= stride;
+    //     for(int j=0; j<n2; j++){
+    //         // cur_data_pos[j] = (cur_data_pos[j] + cur_data_pos[-stride + j]) / 2;
+    //         cur_data_pos[j] = (cur_data_pos[j]);
+
+    //     }
+    // }
 }
 
 /*
@@ -240,7 +247,7 @@ void data_reverse_reorder_2D(T * data_pos, T * data_buffer, size_t n1, size_t n2
 template <class T>
 void data_reverse_reorder_3D(T * data_pos, T * data_buffer, size_t n1, size_t n2, size_t n3, size_t dim0_stride, size_t dim1_stride){
     size_t n1_nodal = (n1 >> 1) + 1;
-    size_t n1_coeff = n1 - n1_nodal;
+    size_t n1_coeff = n1 - n1_nodal; 
     size_t n2_nodal = (n2 >> 1) + 1;
     size_t n2_coeff = n2 - n2_nodal;
     size_t n3_nodal = (n3 >> 1) + 1;
@@ -257,16 +264,18 @@ void data_reverse_reorder_3D(T * data_pos, T * data_buffer, size_t n1, size_t n2
         data_reverse_reorder_2D(cur_data_pos, data_buffer, n2, n3, dim1_stride);
         cur_data_pos += dim0_stride;
     }
-    if(!(n1 & 1)){
-        // n1 is even, change the last coeff plane into nodal plane
-        cur_data_pos -= dim0_stride;
-        for(int j=0; j<n2; j++){
-            for(int k=0; k<n3; k++){
-                cur_data_pos[k] = (cur_data_pos[k] + cur_data_pos[- dim0_stride + k]) / 2;
-            }
-            cur_data_pos += dim1_stride;
-        }
-    }
+    // if(!(n1 & 1)){
+    //     // n1 is even, change the last coeff plane into nodal plane
+    //     cur_data_pos -= dim0_stride;
+    //     for(int j=0; j<n2; j++){
+    //         for(int k=0; k<n3; k++){
+    //             // cur_data_pos[k] = (cur_data_pos[k] + cur_data_pos[- dim0_stride + k]) / 2;
+    //             cur_data_pos[k] = (cur_data_pos[k]);
+    //             // if int the precision will be lost 
+    //         }
+    //         cur_data_pos += dim1_stride;
+    //     }
+    // }
 }
 
 }
